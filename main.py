@@ -403,11 +403,10 @@ def show_menu():
   print('1. Search')
   print('2. Create missing metadata')
   print('3. Fix incomplete metadata')
-  print('4. Sort & clean metadata')
 
 # Show menu option picker
 option = -1
-while option < 0 or option > 4:
+while option < 0 or option > 3:
   show_menu()
   option = int(input('Choose an option: '))
 
@@ -418,5 +417,3 @@ elif option == 2:
   create_all_metadata()
 elif option == 3:
   fix_all_metadata()
-elif option == 4:
-  save_metadata_sorted_and_clean()
