@@ -12,16 +12,17 @@ import sys
 class Util:
   @staticmethod
   def save_json(path, data):
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding='utf-16') as f:
       json.dump(data, f, ensure_ascii=False) # Uglyer but faster and smaller size
       #json.dump(data, f, ensure_ascii=False, indent=2)
 
   @staticmethod
   def load_json(path):
     try:
-      with open(path) as f:
+      with open(path, encoding='utf-16') as f:
         return json.load(f)
     except:
+      print('Error loading metadata file')
       return {}
   
   @staticmethod
@@ -52,6 +53,10 @@ class Util:
     # Debugging
     print('Images with metadata: ' + str(len(metadata_list)))
     print('Images without metadata: ' + str(len(no_metadata_list)))
+
+  @staticmethod
+  def remove_duplicates(array):
+    return list(set(array))
 
 # AI Models
 class DescriptionModel:
@@ -91,6 +96,15 @@ class DescriptionModel:
     generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
     parsed_answer = self.processor.post_process_generation(generated_text, task=prompt, image_size=(image.width, image.height))
     return parsed_answer
+
+  def labels(self, image):
+    prompt = '<OD>'
+    return self.run(image, prompt)[prompt]['labels']
+  
+  def caption(self, image):
+    prompt = '<MORE_DETAILED_CAPTION>' # <CAPTION> <DETAILED_CAPTION>
+    return Util.remove_duplicates(self.run(image, prompt)[prompt].strip())
+    
 
 class TextDetectionModel:
   ocr = None
@@ -156,22 +170,41 @@ images_without_metadata = []
 def metadata_needs_fix(metadata):
   return 'caption' not in metadata or 'labels' not in metadata or 'text' not in metadata
 
-def fix_image_metadata(image, metadata):
-  # Caption missing
+def fix_image_metadata(image_path, metadata):
+  # Variable to check if metadata changed
+  fixed = False
+  image = None
+  
+  # Caption
   if 'caption' not in metadata:
+    # Caption missing -> Generate a new one
     print('Generating caption (very detailed)...')
-    prompt = '<MORE_DETAILED_CAPTION>' # <CAPTION> <DETAILED_CAPTION>
-    metadata['caption'] = model_description.run(image, prompt)[prompt].strip()
+    if (image == None): image = Image.open(image_path) # Load image
+    metadata['caption'] = model_description.caption(image)
+    fixed = True
 
-  # Labels missing
+  # Labels
   if 'labels' not in metadata:
+    # Labels missing -> Generate new ones
     print('Generating labels...')
-    prompt = '<OD>'
-    metadata['labels'] = model_description.run(image, prompt)[prompt]['labels']
+    if (image == None): image = Image.open(image_path) # Load image
+    metadata['labels'] = model_description.labels(image)
+    fixed = True
+  else:
+    # Has labels -> Check for duplicates
+    old_labels = metadata['labels']
+    new_labels = Util.remove_duplicates(old_labels)
+    if len(old_labels) != len(new_labels):
+      # Has duplicates -> Update labels
+      print('Removing label duplicates...')
+      metadata['labels'] = new_labels
+      fixed = True
 
-  # Text missing
+  # Text
   if 'text' not in metadata:
+    # Text missing -> Generate text
     print('Generating text scan...')
+    if (image == None): image = Image.open(image_path) # Load image
     ocr_text = model_text.run(image)
     texts = []
     for ocr in ocr_text:
@@ -184,6 +217,10 @@ def fix_image_metadata(image, metadata):
           texts.append(text)
 
     metadata['text'] = texts
+    fixed = True
+
+  # Return if fixed
+  return fixed
 
 # Images & their metadata (lists)
 def search():
@@ -213,20 +250,17 @@ def create_all_metadata():
   # Loop images without metadata
   size = len(images_without_metadata)
   for i in reversed(range(0, size)):
-    # Get image name & path
+    # Get image name, path & create empty metadata
     image_name = images_without_metadata[i]
     image_path = join(images_folder, image_name)
-
-    # Create empty metadata
     image_metadata = {}
 
-    # Load image
+    # Log image index
     image_number = size - i
     print('\nCreating (' + str(image_number) + ' of ' + str(size) + '): ' + image_path)
-    image = Image.open(image_path)
 
     # Fix metadata (generate missing keys, aka all)
-    fix_image_metadata(image, image_metadata)
+    fix_image_metadata(image_path, image_metadata)
 
     # Move image from a list to another
     images_with_metadata.append(image_name)
@@ -252,23 +286,20 @@ def fix_all_metadata():
   # Loop images with metadata
   size = len(images_with_metadata)
   for i in reversed(range(0, size)):
-    # Get image path & load its metadata
-    image_path = join(images_folder, images_with_metadata[i])
-    image_metadata = metadata[images_with_metadata[i]]
+    # Get image name, path & load its metadata
+    image_name = images_with_metadata[i]
+    image_path = join(images_folder, image_name)
+    image_metadata = metadata[image_name]
 
-    # No need for a fix
-    if not metadata_needs_fix(image_metadata): continue
-
-    # Load image
+    # Log image index
     image_number = size - i
-    print('\nFixing (' + str(size - i) + ' of ' + str(size) + '): ' + image_path)
-    image = Image.open(image_path)
+    print('\nChecking (' + str(size - i) + ' of ' + str(size) + '): ' + image_path)
 
     # Fix metadata
-    fix_image_metadata(image, image_metadata)
-    fixes += 1
+    fixed = fix_image_metadata(image_path, image_metadata)
+    if fixed: fixes += 1
 
-    # Save metadata to prevent losing progress (without sorting, is faster)
+    # Save metadata to prevent losing progress (without sorting since is faster, a sorted version will be saved at the end)
     if image_number != size and fixes % save_every == 0: 
       save_metadata(protect=isFirstSave, sort=False)
       isFirstSave = False
@@ -402,7 +433,7 @@ def show_menu():
   print('0. Exit')
   print('1. Search')
   print('2. Create missing metadata')
-  print('3. Fix incomplete metadata')
+  print('3. Fix metadata')
 
 # Show menu option picker
 option = -1
