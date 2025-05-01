@@ -27,6 +27,10 @@ class Util:
   
     @staticmethod
     def load_images(images_folder, metadata, metadata_list, no_metadata_list):
+        # Empty lists
+        metadata_list.clear()
+        no_metadata_list.clear()
+
         # Get images sorted by modified date
         paths = listdir(images_folder)
 
