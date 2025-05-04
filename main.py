@@ -103,11 +103,11 @@ class DescriptionModel:
 
     def labels(self, image):
         prompt = '<OD>'
-        return self.run(image, prompt)[prompt]['labels']
+        return Util.remove_duplicates(self.run(image, prompt)[prompt]['labels'])
     
     def caption(self, image):
         prompt = '<MORE_DETAILED_CAPTION>' # <CAPTION> <DETAILED_CAPTION>
-        return Util.remove_duplicates(self.run(image, prompt)[prompt].strip())
+        return self.run(image, prompt)[prompt].strip()
 
 class TextDetectionModel:
     ocr = None
