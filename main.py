@@ -115,14 +115,11 @@ class TextDetectionModel:
     def run(self, image):
         # No model -> Load it
         if (self.ocr == None):
-            # Disable PaddleOCR logging
-            import logging
-            logging.getLogger('ppocr').setLevel(logging.ERROR)
-
             # Import LLM libraries
             print('Importing PaddleOCR libraries...')
+            import torch
             from paddleocr import PaddleOCR # pip install paddlepaddle paddleocr
-            self.ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
+            self.ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=False)
 
         # Look for text in the image
         numpy_image = np.array(image.convert('RGB'))
@@ -295,7 +292,6 @@ def fix_all_metadata():
         image_metadata = metadata[image_name]
 
         # Log image index
-        image_number = size - i
         print('\nChecking (' + str(size - i) + ' of ' + str(size) + '): ' + image_path)
 
         # Fix metadata
@@ -303,7 +299,7 @@ def fix_all_metadata():
         if fixed: fixes += 1
 
         # Save metadata to prevent losing progress (without sorting since is faster, a sorted version will be saved at the end)
-        if image_number != size and fixes % save_every == 0: 
+        if fixes != 0 and fixes % save_every == 0: 
             save_metadata(protect=isFirstSave, sort=False)
             isFirstSave = False
 
